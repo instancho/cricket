@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>POV Cricket - Controller</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;800&family=Barlow:wght@400;600&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-color: #060e1a;
+      --accent: #f5a623;
+      --text: #ffffff;
+      --red: #ff3b30;
+      --blue: #007aff;
+    }
+    
+    * { box-sizing: border-box; }
+    
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-color);
+      color: var(--text);
+      font-family: 'Barlow', sans-serif;
+      overflow: hidden;
+      touch-action: none;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    h1, h2, h3, .condensed {
+      font-family: 'Barlow Condensed', sans-serif;
+      text-transform: uppercase;
+      margin: 0;
+    }
+
+    /* Screen Management */
+    #setup-screen, #game-screen {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      transition: opacity 0.3s;
+    }
+
+    /* Setup Screen */
+    #setup-screen {
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      z-index: 100;
+      background: var(--bg-color);
+    }
+
+    #setup-screen h1 {
+      font-size: 4rem;
+      color: var(--accent);
+      margin-bottom: 2rem;
+      text-shadow: 0 0 20px rgba(245, 166, 35, 0.4);
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 300px;
+      margin-bottom: 1.5rem;
+    }
+
+    .input-group label {
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: #8892b0;
+    }
+
+    .input-group input {
+      padding: 12px 16px;
+      font-size: 1.2rem;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: white;
+      border-radius: 8px;
+      font-family: 'Barlow', monospace;
+    }
+
+    .input-group input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: var(--bg-color);
+      border: none;
+      padding: 16px 32px;
+      font-size: 1.5rem;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 800;
+      border-radius: 8px;
+      width: 100%;
+      max-width: 300px;
+      margin-top: 1rem;
+      box-shadow: 0 4px 15px rgba(245, 166, 35, 0.3);
+      cursor: pointer;
+    }
+
+    button.primary:active {
+      transform: scale(0.98);
+    }
+
+    /* Game Screen */
+    #game-screen {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #game-screen.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 20px;
+      background: rgba(0,0,0,0.5);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      z-index: 10;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #8892b0;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--red);
+      box-shadow: 0 0 8px var(--red);
+    }
+    
+    .dot.connected {
+      background: #34c759;
+      box-shadow: 0 0 8px #34c759;
+    }
+
+    .recalibrate-btn {
+      background: rgba(255,255,255,0.1);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-family: 'Barlow', sans-serif;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .canvas-container {
+      flex: 1;
+      position: relative;
+      background: radial-gradient(circle at center, #1a2332 0%, #060e1a 100%);
+    }
+
+    #batCanvas {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+    }
+
+    /* Overlays */
+    .overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 20;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .overlay.visible {
+      opacity: 1;
+    }
+
+    #calibrating-overlay .box {
+      background: rgba(0,0,0,0.8);
+      padding: 30px;
+      border-radius: 16px;
+      border: 1px solid var(--accent);
+      text-align: center;
+    }
+
+    #calibrating-overlay h2 {
+      color: var(--accent);
+      font-size: 2rem;
+      margin-bottom: 15px;
+    }
+    
+    .progress-bar {
+      width: 200px;
+      height: 8px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 0 auto;
+    }
+
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.1s linear;
+    }
+
+    #result-overlay .result-text {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 6rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      text-shadow: 0 0 30px currentColor;
+      transform: scale(0.5);
+      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    
+    #result-overlay.visible .result-text {
+      transform: scale(1);
+    }
+
+    .result-bg {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      opacity: 0.3;
+      z-index: -1;
+    }
+
+    .metrics {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      color: rgba(255,255,255,0.4);
+      font-family: monospace;
+      font-size: 0.8rem;
+      z-index: 5;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SETUP SCREEN -->
+  <div id="setup-screen">
+    <h1>POV CRICKET</h1>
+    <div class="input-group">
+      <label>PC SERVER IP</label>
+      <input type="text" id="ip-input" placeholder="e.g. 192.168.1.5">
+    </div>
+    <div class="input-group">
+      <label>PORT</label>
+      <input type="text" id="port-input" value="8080">
+    </div>
+    <button class="primary" id="connect-btn">CONNECT & START</button>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="game-screen">
+    <div class="top-bar">
+      <div class="status-indicator">
+        <div class="dot" id="conn-dot"></div>
+        <span id="conn-lbl">DISCONNECTED</span>
+      </div>
+      <button class="recalibrate-btn" id="recalibrate-btn">↺ RECALIBRATE</button>
+    </div>
+    
+    <div class="canvas-container">
+      <canvas id="batCanvas"></canvas>
+      <div class="metrics" id="metrics-disp">A: 0.0 | B: 0.0 | G: 0.0</div>
+    </div>
+
+    <!-- Calibrating Overlay -->
+    <div class="overlay" id="calibrating-overlay">
+      <div class="box">
+        <h2>HOLD STEADY</h2>
+        <div class="condensed" style="margin-bottom: 15px; color: #8892b0">CALIBRATING NEUTRAL POSITION</div>
+        <div class="progress-bar"><div class="progress-fill" id="calib-progress"></div></div>
+      </div>
+    </div>
+
+    <!-- Result Overlay -->
+    <div class="overlay" id="result-overlay">
+      <div class="result-bg" id="result-bg"></div>
+      <div class="result-text" id="result-text">SIX!</div>
+    </div>
+  </div>
+
+  <script>
+    // Config
+    const IP_KEY = 'pov_cricket_ip';
+    const PORT_KEY = 'pov_cricket_port';
+
+    // UI Elements
+    const setupScreen = document.getElementById('setup-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const ipInput = document.getElementById('ip-input');
+    const portInput = document.getElementById('port-input');
+    const connectBtn = document.getElementById('connect-btn');
+    const connDot = document.getElementById('conn-dot');
+    const connLbl = document.getElementById('conn-lbl');
+    const recalibrateBtn = document.getElementById('recalibrate-btn');
+    const metricsDisp = document.getElementById('metrics-disp');
+    const calibOverlay = document.getElementById('calibrating-overlay');
+    const calibProgress = document.getElementById('calib-progress');
+    const resultOverlay = document.getElementById('result-overlay');
+    const resultBg = document.getElementById('result-bg');
+    const resultText = document.getElementById('result-text');
+    const canvas = document.getElementById('batCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // State
+    let ws = null;
+    let autoReconnectId = null;
+    let isConnected = false;
+    let deliveryWindowOpen = false;
+    let targetIp = '';
+    let targetPort = '';
+
+    // Sensor State
+    let curAlpha = 0, curBeta = 0, curGamma = 0;
+    
+    // Calibration State
+    let neutralAlpha = 0, neutralBeta = 0, neutralGamma = 0;
+    let isCalibrating = false;
+    let calibSamples = [];
+    let calibTimer = null;
+
+    // Swing Tracker State
+    let swingActive = false;
+    let swingStartTime = 0;
+    let maxAccel = 0;
+    let maxRotation = 0;
+    let impactBeta = 0;
+    let impactGamma = 0;
+    let impactAlpha = 0;
+
+    // Canvas State
+    let cvsWidth = 0, cvsHeight = 0;
+    let smoothAlpha = 0, smoothBeta = 0, smoothGamma = 0;
+
+    // Init
+    ipInput.value = localStorage.getItem(IP_KEY) || '';
+    portInput.value = localStorage.getItem(PORT_KEY) || '8080';
+
+    connectBtn.addEventListener('click', async () => {
+      // Request iOS Permissions
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        try {
+          const permissionState = await DeviceMotionEvent.requestPermission();
+          if (permissionState !== 'granted') {
+            alert('Motion sensor permission denied!');
+            return;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const permissionState = await DeviceOrientationEvent.requestPermission();
+          if (permissionState !== 'granted') {
+            alert('Orientation sensor permission denied!');
+            return;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      localStorage.setItem(IP_KEY, ipInput.value);
+      localStorage.setItem(PORT_KEY, portInput.value);
+      targetIp = ipInput.value;
+      targetPort = portInput.value;
+
+      setupScreen.style.display = 'none';
+      gameScreen.classList.add('active');
+      
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+      
+      startSensors();
+      connectWebSocket();
+      requestAnimationFrame(renderLoop);
+
+      // Initial Calibration
+      setTimeout(startCalibration, 500);
+    });
+
+    recalibrateBtn.addEventListener('click', startCalibration);
+
+    function connectWebSocket() {
+      if (ws) {
+        ws.close();
+      }
+      
+      const url = `ws://${targetIp}:${targetPort}/phone`;
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        isConnected = true;
+        connDot.classList.add('connected');
+        connLbl.innerText = 'CONNECTED';
+        
+        // Send initial setup
+        sendMsg({
+          type: "calibrated",
+          neutralBeta, neutralGamma, neutralAlpha
+        });
+      };
+
+      ws.onclose = () => {
+        isConnected = false;
+        connDot.classList.remove('connected');
+        connLbl.innerText = 'RECONNECTING...';
+        clearTimeout(autoReconnectId);
+        autoReconnectId = setTimeout(connectWebSocket, 2000);
+      };
+
+      ws.onerror = () => {
+        ws.close(); // Triggers onclose
+      };
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          handleGameMessage(msg);
+        } catch(err) {}
+      };
+    }
+
+    function sendMsg(obj) {
+      if (isConnected && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(obj));
+      }
+    }
+
+    function handleGameMessage(msg) {
+      if (msg.type === 'delivery_start') {
+        deliveryWindowOpen = true;
+      } else if (msg.type === 'delivery_end') {
+        deliveryWindowOpen = false;
+        startCalibration();
+      } else if (msg.type === 'result') {
+        showShotResult(msg.outcome, msg.runs);
+      }
+    }
+
+    // --- SENSOR LOGIC ---
+
+    function startSensors() {
+      window.addEventListener('deviceorientation', (e) => {
+        curAlpha = e.alpha || 0;
+        curBeta = e.beta || 0;
+        curGamma = e.gamma || 0;
+
+        if (isCalibrating) {
+          calibSamples.push({ a: curAlpha, b: curBeta, g: curGamma });
+        }
+      });
+
+      window.addEventListener('devicemotion', (e) => {
+        if (!e.accelerationIncludingGravity) return;
+        
+        const acc = e.accelerationIncludingGravity;
+        const rot = e.rotationRate || { alpha:0, beta:0, gamma:0 };
+        
+        // Calculate magnitudes
+        const accMag = Math.sqrt(acc.x*acc.x + acc.y*acc.y + acc.z*acc.z);
+        const linearAcc = Math.abs(accMag - 9.81);
+        const rotMag = Math.sqrt(rot.alpha*rot.alpha + rot.beta*rot.beta + rot.gamma*rot.gamma);
+
+        // Shake detection (Workaround 1b)
+        if (linearAcc > 25) {
+          if (!isCalibrating && !swingActive && !deliveryWindowOpen) {
+            // Trigger haptic
+            if (navigator.vibrate) navigator.vibrate([30, 10, 30]);
+            startCalibration();
+            return;
+          }
+        }
+
+        // Shot detection processing
+        if (deliveryWindowOpen) {
+          processShotDetection(linearAcc, rotMag);
+        }
+      });
+
+      // Stream orientation every 50ms
+      setInterval(() => {
+        if (isCalibrating) return;
+        
+        // Calculate relative orientation
+        let relAlpha = curAlpha - neutralAlpha;
+        let relBeta = curBeta - neutralBeta;
+        let relGamma = curGamma - neutralGamma;
+
+        // Wrap alpha
+        if (relAlpha > 180) relAlpha -= 360;
+        if (relAlpha < -180) relAlpha += 360;
+
+        sendMsg({
+          type: "orientation",
+          beta: relBeta,
+          gamma: relGamma,
+          alpha: relAlpha
+        });
+
+        metricsDisp.innerText = `A: ${relAlpha.toFixed(1)} | B: ${relBeta.toFixed(1)} | G: ${relGamma.toFixed(1)}`;
+
+      }, 50);
+    }
+
+    // --- SHOT DETECTION & CLASSIFICATION ---
+
+    function processShotDetection(linearAcc, rotMag) {
+      const now = Date.now();
+
+      // Start swing window (Condition 1)
+      if (linearAcc > 14 && !swingActive) {
+        swingActive = true;
+        swingStartTime = now;
+        maxAccel = linearAcc;
+        maxRotation = rotMag;
+        
+        // Snapshot orientation at start of power
+        let relBeta = curBeta - neutralBeta;
+        let relGamma = curGamma - neutralGamma;
+        let relAlpha = curAlpha - neutralAlpha;
+        impactBeta = relBeta;
+        impactGamma = relGamma;
+        impactAlpha = (relAlpha > 180) ? relAlpha - 360 : (relAlpha < -180) ? relAlpha + 360 : relAlpha;
+      }
+
+      if (swingActive) {
+        // Track maximums
+        if (linearAcc > maxAccel) maxAccel = linearAcc;
+        if (rotMag > maxRotation) maxRotation = rotMag;
+
+        const duration = now - swingStartTime;
+
+        // End swing window automatically if it drops OR time expires
+        if (linearAcc < 8 || duration > 650) {
+          swingActive = false;
+
+          // Condition 2: Duration 80ms - 650ms
+          // Condition 3: Rotation > 45 deg/s
+          if (duration >= 80 && duration <= 650 && maxRotation > 45) {
+            fireShot(duration);
+          }
+        }
+      }
+    }
+
+    function fireShot(duration) {
+      // Classify
+      let shotType = "drive";
+      
+      const pBeta = impactBeta;
+      const pGamma = impactGamma;
+
+      if (pGamma > 50 || pGamma < -50) {
+        shotType = "sweep";
+      } else if (pGamma > 25) {
+        shotType = "cut";
+      } else if (pGamma < -25) {
+        shotType = "glance";
+      } else if (pBeta < -20) {
+        // Power determines pull vs hook but handled game side mainly, pass pull
+        shotType = "pull";
+      } else if (pBeta > 20) {
+        shotType = "power_drive";
+      }
+
+      let power = maxAccel / 40.0;
+      if (power > 1.0) power = 1.0;
+
+      let directionAngle = impactAlpha + (impactGamma * 0.5);
+
+      const shotData = {
+        type: "shot",
+        shotType: shotType,
+        power: power,
+        maxAccel: maxAccel,
+        maxRotation: maxRotation,
+        duration: duration,
+        batBeta: pBeta,
+        batGamma: pGamma,
+        batAlpha: impactAlpha,
+        directionAngle: directionAngle,
+        timestamp: Date.now()
+      };
+
+      sendMsg(shotData);
+      
+      // Haptic feedback for shot
+      if (navigator.vibrate) navigator.vibrate([20, 30, 20]);
+    }
+
+    // --- CALIBRATION ---
+
+    function startCalibration() {
+      if (isCalibrating) return;
+      isCalibrating = true;
+      calibSamples = [];
+      calibOverlay.classList.add('visible');
+      calibProgress.style.width = '0%';
+      
+      let start = Date.now();
+      
+      calibTimer = setInterval(() => {
+        let elapsed = Date.now() - start;
+        let pct = Math.min(100, (elapsed / 1200) * 100);
+        calibProgress.style.width = pct + '%';
+
+        if (elapsed >= 1200) {
+          finishCalibration();
+        }
+      }, 50);
+    }
+
+    function finishCalibration() {
+      clearInterval(calibTimer);
+      isCalibrating = false;
+      calibOverlay.classList.remove('visible');
+
+      if (calibSamples.length > 0) {
+        let sumA=0, sumB=0, sumG=0;
+        calibSamples.forEach(s => {
+          sumA += s.a; sumB += s.b; sumG += s.g;
+        });
+        neutralAlpha = sumA / calibSamples.length;
+        neutralBeta = sumB / calibSamples.length;
+        neutralGamma = sumG / calibSamples.length;
+
+        sendMsg({
+          type: "calibrated",
+          neutralBeta, neutralGamma, neutralAlpha
+        });
+      }
+    }
+
+    // --- UI/RENDERING ---
+
+    let resultTimeout = null;
+    function showShotResult(outcome, runs) {
+      clearTimeout(resultTimeout);
+      
+      let color = '#888';
+      let text = 'LEAVE';
+
+      if (outcome === 'out') {
+        color = varColor('--red');
+        text = 'OUT!';
+      } else if (runs === 6) {
+        color = varColor('--accent');
+        text = 'SIX!';
+      } else if (runs === 4) {
+        color = varColor('--blue');
+        text = 'FOUR!';
+      } else if (runs > 0) {
+        color = '#34c759';
+        text = `${runs} RUN${runs>1?'S':''}`;
+      }
+
+      resultText.style.color = color;
+      resultText.innerText = text;
+      resultBg.style.backgroundColor = color;
+      
+      resultOverlay.classList.add('visible');
+      
+      if (navigator.vibrate) {
+        if (outcome === 'out') navigator.vibrate([100, 50, 100, 50, 200]);
+        else if (runs === 6) navigator.vibrate([50, 50, 100]);
+        else navigator.vibrate([30]);
+      }
+
+      resultTimeout = setTimeout(() => {
+        resultOverlay.classList.remove('visible');
+      }, 2000);
+    }
+
+    function varColor(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    function resizeCanvas() {
+      const parent = canvas.parentElement;
+      canvas.width = parent.clientWidth * window.devicePixelRatio;
+      canvas.height = parent.clientHeight * window.devicePixelRatio;
+      cvsWidth = canvas.width;
+      cvsHeight = canvas.height;
+    }
+
+    function renderLoop() {
+      if (!gameScreen.classList.contains('active')) {
+        requestAnimationFrame(renderLoop);
+        return;
+      }
+
+      ctx.clearRect(0, 0, cvsWidth, cvsHeight);
+
+      const cx = cvsWidth / 2;
+      const cy = cvsHeight / 2;
+
+      // Draw Grid
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 2 * window.devicePixelRatio;
+      const step = 60 * window.devicePixelRatio;
+      for (let x = (cx % step); x < cvsWidth; x += step) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cvsHeight); ctx.stroke();
+      }
+      for (let y = (cy % step); y < cvsHeight; y += step) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cvsWidth, y); ctx.stroke();
+      }
+
+      // Draw Crosshair
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.beginPath(); ctx.moveTo(cx - 20, cy); ctx.lineTo(cx + 20, cy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, cy - 20); ctx.lineTo(cx, cy + 20); ctx.stroke();
+
+      if (!isCalibrating) {
+        // Calculate relative
+        let relAlpha = curAlpha - neutralAlpha;
+        let relBeta = curBeta - neutralBeta;
+        let relGamma = curGamma - neutralGamma;
+        if (relAlpha > 180) relAlpha -= 360;
+        if (relAlpha < -180) relAlpha += 360;
+
+        // Lerp
+        smoothAlpha += (relAlpha - smoothAlpha) * 0.25;
+        smoothBeta += (relBeta - smoothBeta) * 0.25;
+        smoothGamma += (relGamma - smoothGamma) * 0.25;
+
+        // Render Bat Representation
+        ctx.save();
+        ctx.translate(cx, cy);
+        
+        const pxScale = window.devicePixelRatio;
+        
+        // Tilt canvas based on gamma (roll)
+        ctx.rotate(smoothGamma * Math.PI / 180);
+        
+        // Translate based on alpha (yaw) and beta (pitch)
+        const shiftX = smoothAlpha * 2 * pxScale;
+        const shiftY = smoothBeta * -3 * pxScale;
+        ctx.translate(shiftX, shiftY);
+
+        // Drop shadow
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 20;
+        ctx.shadowOffsetX = 10;
+        ctx.shadowOffsetY = 10;
+
+        // Bat width/height
+        const w = 60 * pxScale;
+        const h = 240 * pxScale;
+
+        // Handle
+        const hw = 24 * pxScale;
+        const hh = 80 * pxScale;
+        ctx.fillStyle = '#222';
+        ctx.fillRect(-hw/2, -h/2, hw, hh);
+        
+        // Handle stripes
+        ctx.strokeStyle = '#444';
+        ctx.lineWidth = 4 * pxScale;
+        for(let i=0; i<6; i++) {
+          ctx.beginPath();
+          ctx.moveTo(-hw/2, -h/2 + 10*pxScale + i*12*pxScale);
+          ctx.lineTo(hw/2, -h/2 + 15*pxScale + i*12*pxScale);
+          ctx.stroke();
+        }
+
+        // Blade
+        const bw = w;
+        const bh = h - hh;
+        const by = -h/2 + hh;
+        
+        const grad = ctx.createLinearGradient(-bw/2, 0, bw/2, 0);
+        grad.addColorStop(0, '#d1a87e');
+        grad.addColorStop(0.5, '#ebd1a7');
+        grad.addColorStop(1, '#c29668');
+        
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.roundRect(-bw/2, by, bw, bh, 8 * pxScale);
+        ctx.fill();
+
+        // Horizontal ridge lines on bat
+        ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+        ctx.lineWidth = 2 * pxScale;
+        for(let i=1; i<=5; i++) {
+          let y = by + (bh/6) * i;
+          ctx.beginPath();
+          ctx.moveTo(-bw/2 + 5*pxScale, y);
+          ctx.lineTo(bw/2 - 5*pxScale, y);
+          ctx.stroke();
+        }
+
+        ctx.restore();
+        
+        // Draw orientation dot indicator mapping alpha/beta loosely
+        ctx.fillStyle = varColor('--accent');
+        const dotX = cx + (smoothAlpha * 2 * pxScale);
+        const dotY = cy + (smoothBeta * -4 * pxScale);
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, 6 * pxScale, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      requestAnimationFrame(renderLoop);
+    }
+  </script>
+</body>
+</html>
