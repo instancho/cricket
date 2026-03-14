@@ -297,15 +297,10 @@
   <div id="setup-screen">
     <div class="logo">POV CRICKET</div>
     <div class="setup-box">
-      <div class="input-group">
-        <label>SERVER IP ADDRESS</label>
-        <input type="text" id="ip-input" placeholder="e.g. 192.168.1.5" value="localhost">
+      <div style="text-align: center; margin-bottom: 20px; color: #8892b0;">
+        Start a new room and invite a phone controller.
       </div>
-      <div class="input-group">
-        <label>PORT</label>
-        <input type="text" id="port-input" value="8080">
-      </div>
-      <button class="primary" id="start-btn">START GAME</button>
+      <button class="primary" id="start-btn">START NEW GAME</button>
     </div>
   </div>
 
@@ -323,14 +318,14 @@
           <div class="balls-left" id="hud-balls">36 BALLS LEFT</div>
         </div>
       </div>
-      <div class="status-pill" id="status-pill">WAITING FOR CONNECTION...</div>
+      <div class="status-pill" id="status-pill">CONNECTING TO SERVER...</div>
       
       <div class="result-overlay" id="result-overlay">SIX!</div>
       <div class="footwork-tag condensed" id="footwork-tag">▲ FRONT FOOT</div>
       
       <div class="phone-status">
         <div class="phone-dot" id="phone-dot"></div>
-        <span id="phone-lbl">PHONE DISCONNECTED</span>
+        <span id="phone-lbl">WAITING FOR ROOM CODE...</span>
       </div>
     </div>
     
@@ -343,15 +338,11 @@
 
   <script>
     // Config
-    const IP_KEY = 'pov_cricket_pc_ip';
-    const PORT_KEY = 'pov_cricket_pc_port';
     const MAX_BALLS = 36;
 
     // UI Elements
     const setupScreen = document.getElementById('setup-screen');
     const gameScreen = document.getElementById('game-screen');
-    const ipInput = document.getElementById('ip-input');
-    const portInput = document.getElementById('port-input');
     const startBtn = document.getElementById('start-btn');
     const statusPill = document.getElementById('status-pill');
     
@@ -379,8 +370,7 @@
     let ws = null;
     let isConnected = false;
     let phoneConnected = false;
-    let targetIp = '';
-    let targetPort = '';
+    let roomCode = null;
     let autoReconnectId = null;
 
     // Bat Prediction State
@@ -412,16 +402,7 @@
     // Trims
     let shotTrajectory = null; // { points: [], color: '', active: false, timer: 0 }
 
-    // Init
-    ipInput.value = localStorage.getItem(IP_KEY) || 'localhost';
-    portInput.value = localStorage.getItem(PORT_KEY) || '8080';
-
     startBtn.addEventListener('click', () => {
-      localStorage.setItem(IP_KEY, ipInput.value);
-      localStorage.setItem(PORT_KEY, portInput.value);
-      targetIp = ipInput.value;
-      targetPort = portInput.value;
-
       setupScreen.style.display = 'none';
       gameScreen.classList.add('active');
       
@@ -438,7 +419,10 @@
     function connectWebSocket() {
       if (ws) ws.close();
       
-      const url = `ws://${targetIp}:${targetPort}/game`;
+      // Instead of manual IP/Port, we just connect to the host that served us the HTML
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = `${protocol}//${location.host}/game`;
+      
       ws = new WebSocket(url);
 
       ws.onopen = () => {
@@ -472,7 +456,11 @@
     }
 
     function handleMessage(msg) {
-      if (msg.type === 'phone_connected') {
+      if (msg.type === 'room_code') {
+        roomCode = msg.code;
+        updateStatusPill(`ROOM CODE: ${roomCode}`);
+        phoneLbl.innerText = `WAITING FOR PHONE... (ENTER CODE ${roomCode})`;
+      } else if (msg.type === 'phone_connected') {
         phoneConnected = true;
         updatePhoneStatus();
         if (deliveryState === 'IDLE' && ballsBowled < MAX_BALLS) {
@@ -500,7 +488,11 @@
         phoneLbl.innerText = 'PHONE CONNECTED';
       } else {
         phoneDot.classList.remove('connected');
-        phoneLbl.innerText = 'WAITING FOR PHONE...';
+        if (roomCode) {
+          phoneLbl.innerText = `WAITING FOR PHONE... (ENTER CODE ${roomCode})`;
+        } else {
+          phoneLbl.innerText = 'WAITING FOR ROOM CODE...';
+        }
       }
     }
 

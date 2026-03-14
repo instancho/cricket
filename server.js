@@ -2,31 +2,76 @@ const http = require('http');
 const crypto = require('crypto');
 const net = require('net');
 const fs = require('fs');
+const path = require('path');
 
-const PORT = 8080;
+const PORT = process.env.PORT || 8080;
 const HOST = '0.0.0.0';
 
 // WebSocket UUID for Sec-WebSocket-Accept
 const WS_MAGIC_STRING = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
-// Connections
-let phoneClient = null;
-let gameClient = null;
+// Sessions Map: roomCode (string) -> { gameClient: socket, phoneClient: socket, lastOrientation: string }
+const sessions = new Map();
 
-// Cache last orientation to send to game immediately on connect
-let lastOrientation = null;
+// Generate 4-digit room code
+function generateRoomCode() {
+  let code;
+  do {
+    code = Math.floor(1000 + Math.random() * 9000).toString();
+  } while (sessions.has(code));
+  return code;
+}
 
-// Create HTTP server
+// Create HTTP server to serve static files
 const server = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('POV Cricket Server is running.\nConnect phone to /phone and game to /game via WebSockets.');
+  let filePath = path.join(__dirname, req.url === '/' ? 'game.html' : req.url);
+  
+  // Basic security check to prevent directory traversal
+  if (filePath.indexOf(__dirname) !== 0) {
+    res.writeHead(403);
+    return res.end('Forbidden');
+  }
+  
+  // Default to 404
+  fs.stat(filePath, (err, stats) => {
+    if (err || !stats.isFile()) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('404 Not Found');
+      return;
+    }
+    
+    const ext = path.extname(filePath);
+    let contentType = 'text/plain';
+    if (ext === '.html') contentType = 'text/html';
+    else if (ext === '.css') contentType = 'text/css';
+    else if (ext === '.js') contentType = 'application/javascript';
+    
+    res.writeHead(200, { 'Content-Type': contentType });
+    fs.createReadStream(filePath).pipe(res);
+  });
 });
 
 // Handle upgrade requests
 server.on('upgrade', (req, socket, head) => {
   const pathname = req.url;
   
-  if (pathname !== '/phone' && pathname !== '/game') {
+  let isGame = false;
+  let isPhone = false;
+  let roomCode = null;
+
+  if (pathname === '/game') {
+    isGame = true;
+  } else if (pathname.startsWith('/phone/')) {
+    isPhone = true;
+    roomCode = pathname.replace('/phone/', '');
+  } else {
+    socket.destroy();
+    return;
+  }
+
+  if (isPhone && (!roomCode || roomCode.length !== 4 || !sessions.has(roomCode))) {
+    // Invalid or non-existent room code
+    socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
     socket.destroy();
     return;
   }
@@ -52,31 +97,38 @@ server.on('upgrade', (req, socket, head) => {
 
   socket.write(headers.join('\r\n') + '\r\n\r\n');
 
-  // Client connected successfully
-  const isPhone = pathname === '/phone';
-  
-  if (isPhone) {
-    if (phoneClient) phoneClient.destroy();
-    phoneClient = socket;
-    console.log('[+] Phone connected');
+  // Session Management
+  let session;
+
+  if (isGame) {
+    roomCode = generateRoomCode();
+    session = {
+      gameClient: socket,
+      phoneClient: null,
+      lastOrientation: null
+    };
+    sessions.set(roomCode, session);
+    console.log(`[+] Room ${roomCode} created by Game`);
+    
+    // Send the generated room code to the game client
+    setImmediate(() => {
+      sendMessage(socket, JSON.stringify({ type: 'room_code', code: roomCode }));
+    });
+  } else if (isPhone) {
+    session = sessions.get(roomCode);
+    if (session.phoneClient) {
+      session.phoneClient.destroy();
+    }
+    session.phoneClient = socket;
+    console.log(`[+] Phone joined Room ${roomCode}`);
     
     // Notify game
-    if (gameClient) {
-      sendMessage(gameClient, JSON.stringify({ type: 'phone_connected' }));
-    }
-  } else {
-    if (gameClient) gameClient.destroy();
-    gameClient = socket;
-    console.log('[+] Game connected');
-    
-    // Send cached orientation if available
-    if (lastOrientation) {
-      sendMessage(gameClient, lastOrientation);
-    }
-
-    // Notify phone
-    if (phoneClient) {
-      sendMessage(phoneClient, JSON.stringify({ type: 'game_connected' }));
+    if (session.gameClient) {
+      sendMessage(session.gameClient, JSON.stringify({ type: 'phone_connected' }));
+      // Send cached orientation if available
+      if (session.lastOrientation) {
+        sendMessage(session.gameClient, session.lastOrientation);
+      }
     }
   }
 
@@ -98,32 +150,29 @@ server.on('upgrade', (req, socket, head) => {
       let headerLength = 2;
       
       if (payloadLength === 126) {
-        if (buffer.length < 4) return; // Wait for more data
+        if (buffer.length < 4) return;
         payloadLength = buffer.readUInt16BE(2);
         headerLength = 4;
       } else if (payloadLength === 127) {
-        if (buffer.length < 10) return; // Wait for more data
-        // Read 64-bit Big Int length, Node.js readBigUInt64BE
+        if (buffer.length < 10) return;
         const high = buffer.readUInt32BE(2);
         const low = buffer.readUInt32BE(6);
-        // Note: bitwise operators in JS limit strictly to 32 bits, but for huge payloads > 4GB we don't care here
         payloadLength = (high * Math.pow(2, 32)) + low;
         headerLength = 10;
       }
       
       if (masked) {
-        headerLength += 4; // Masking key is 4 bytes
+        headerLength += 4;
       }
       
       const frameLength = headerLength + payloadLength;
       
       if (buffer.length < frameLength) {
-        return; // Wait for full frame
+        return;
       }
       
-      // We have a full frame
       const frame = buffer.slice(0, frameLength);
-      buffer = buffer.slice(frameLength); // Keep remaining data for next iteration
+      buffer = buffer.slice(frameLength);
       
       // Handle close
       if (opcode === 0x8) {
@@ -134,7 +183,7 @@ server.on('upgrade', (req, socket, head) => {
       // Handle ping
       if (opcode === 0x9) {
         const pong = Buffer.alloc(2);
-        pong[0] = 0x8a; // FIN + Pong
+        pong[0] = 0x8a;
         pong[1] = 0x00;
         socket.write(pong);
         continue;
@@ -157,17 +206,17 @@ server.on('upgrade', (req, socket, head) => {
         try {
           const msgJson = JSON.parse(message);
           if (msgJson.type === 'orientation' && isPhone) {
-            lastOrientation = message;
+            session.lastOrientation = message;
           }
         } catch (e) {
           // Ignore invalid JSON
         }
         
-        // Relay logic
-        if (isPhone && gameClient) {
-          sendMessage(gameClient, message);
-        } else if (!isPhone && phoneClient) {
-          sendMessage(phoneClient, message);
+        // Relay logic within the specific session room
+        if (isPhone && session.gameClient) {
+          sendMessage(session.gameClient, message);
+        } else if (isGame && session.phoneClient) {
+          sendMessage(session.phoneClient, message);
         }
       }
     }
@@ -175,22 +224,25 @@ server.on('upgrade', (req, socket, head) => {
 
   socket.on('close', () => {
     if (isPhone) {
-      phoneClient = null;
-      console.log('[-] Phone disconnected');
-      if (gameClient) {
-        sendMessage(gameClient, JSON.stringify({ type: 'phone_disconnected' }));
+      session.phoneClient = null;
+      console.log(`[-] Phone left Room ${roomCode}`);
+      if (session.gameClient) {
+        sendMessage(session.gameClient, JSON.stringify({ type: 'phone_disconnected' }));
       }
-    } else {
-      gameClient = null;
-      console.log('[-] Game disconnected');
-      if (phoneClient) {
-        sendMessage(phoneClient, JSON.stringify({ type: 'game_disconnected' }));
+    } else if (isGame) {
+      session.gameClient = null;
+      console.log(`[-] Game left Room ${roomCode}`);
+      if (session.phoneClient) {
+        sendMessage(session.phoneClient, JSON.stringify({ type: 'game_disconnected' }));
       }
+      // If the game client disconnects, we destroy the room entirely
+      sessions.delete(roomCode);
+      console.log(`[x] Room ${roomCode} destroyed`);
     }
   });
 
   socket.on('error', (err) => {
-    console.error(`Socket error on ${pathname}:`, err.message);
+    console.error(`Socket error on Room ${roomCode}:`, err.message);
   });
 });
 
@@ -240,7 +292,6 @@ server.listen(PORT, HOST, () => {
   console.log(`📡 Listening on: http://0.0.0.0:${PORT}`);
   console.log('====================================');
   console.log('Waiting for connections...');
-  console.log(`Phone Controller URL -> http://<YOUR_LOCAL_IP>:${PORT}/phone`);
-  console.log(`Game Client URL      -> http://<YOUR_LOCAL_IP>:${PORT}/game`);
-  console.log('Run `ifconfig` or `ipconfig` to find your local IP address.');
+  console.log('Open the browser to the host address to start a game room.');
 });
+
