@@ -1,0 +1,16 @@
+{
+  "name": "pov-cricket",
+  "version": "1.0.0",
+  "description": "POV Cricket Game - Browser based motion controlled cricket",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "cricket",
+    "game",
+    "websocket"
+  ],
+  "author": "instancho",
+  "license": "ISC"
+}
