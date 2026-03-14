@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>POV Cricket - PC Game</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;800&family=Barlow:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #030812;
+      --accent: #f5a623;
+      --text: #ffffff;
+      --red: #ff3b30;
+      --blue: #007aff;
+      --green: #34c759;
+      --dark: #0a1120;
+    }
+    
+    * { box-sizing: border-box; }
+    
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-color);
+      color: var(--text);
+      font-family: 'Barlow', sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    h1, h2, h3, .condensed {
+      font-family: 'Barlow Condensed', sans-serif;
+      text-transform: uppercase;
+      margin: 0;
+    }
+
+    /* Screen Management */
+    #setup-screen, #game-screen {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      transition: opacity 0.5s;
+    }
+
+    /* Setup Screen */
+    #setup-screen {
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      background: radial-gradient(circle at center, #0a1426 0%, #030812 100%);
+    }
+
+    .logo {
+      font-size: 6rem;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 800;
+      color: var(--accent);
+      margin-bottom: 20px;
+      text-shadow: 0 0 30px rgba(245, 166, 35, 0.4);
+      letter-spacing: 2px;
+    }
+
+    .setup-box {
+      background: rgba(255,255,255,0.03);
+      padding: 40px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.1);
+      width: 400px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 20px;
+    }
+
+    .input-group label {
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #8892b0;
+      font-size: 0.9rem;
+    }
+
+    .input-group input {
+      padding: 14px 16px;
+      font-size: 1.2rem;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: white;
+      border-radius: 8px;
+    }
+
+    .input-group input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      padding: 16px;
+      font-size: 1.5rem;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 800;
+      border-radius: 8px;
+      width: 100%;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(245, 166, 35, 0.3);
+      transition: all 0.2s;
+    }
+
+    button.primary:hover {
+      background: #ffb845;
+      transform: translateY(-2px);
+    }
+
+    /* Game Screen */
+    #game-screen {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #game-screen.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 1;
+    }
+
+    /* HUD */
+    .hud {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+    }
+
+    .score-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(90deg, rgba(10,17,32,0.9) 0%, rgba(10,17,32,0.6) 50%, rgba(10,17,32,0.9) 100%);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 15px 30px;
+      border-radius: 12px;
+      backdrop-filter: blur(5px);
+    }
+
+    .runs-wickets {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 3.5rem;
+      font-weight: 800;
+      line-height: 1;
+      color: var(--accent);
+      text-shadow: 0 2px 10px rgba(245, 166, 35, 0.3);
+    }
+
+    .over-info {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .over-label {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #8892b0;
+      margin-bottom: 8px;
+    }
+
+    .over-history {
+      display: flex;
+      gap: 6px;
+    }
+
+    .ball-dot {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.1);
+      display: flex; justify-content: center; align-items: center;
+      font-size: 10px; font-weight: bold;
+    }
+    .ball-dot.six { background: var(--accent); color: #000; }
+    .ball-dot.four { background: var(--blue); }
+    .ball-dot.out { background: var(--red); }
+    .ball-dot.run { background: var(--green); }
+    .ball-dot.dot { background: #333; }
+
+    .run-rate {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 1.8rem;
+      font-weight: 600;
+      text-align: right;
+    }
+    
+    .balls-left {
+      font-size: 1rem;
+      color: #8892b0;
+      font-family: 'Barlow', sans-serif;
+    }
+
+    .status-pill {
+      align-self: center;
+      background: rgba(0,0,0,0.6);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 30px;
+      padding: 8px 24px;
+      margin-top: 15px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      color: #e2e8f0;
+    }
+
+    /* Result Overlay */
+    .result-overlay {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%) scale(0.5);
+      opacity: 0;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 8rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .result-overlay.active {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+    }
+
+    .result-six { color: var(--accent); text-shadow: 0 0 40px rgba(245,166,35,0.6); }
+    .result-four { color: var(--blue); text-shadow: 0 0 40px rgba(0,122,255,0.6); }
+    .result-out { color: var(--red); text-shadow: 0 0 40px rgba(255,59,48,0.6); }
+    .result-leave { color: #888; text-shadow: 0 0 20px rgba(136,136,136,0.3); font-size: 5rem; }
+
+    /* Tags */
+    .footwork-tag {
+      position: absolute;
+      bottom: 20%; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(245, 166, 35, 0.9);
+      color: #000;
+      padding: 6px 16px;
+      border-radius: 4px;
+      font-weight: 800;
+      font-size: 1.2rem;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .footwork-tag.active { opacity: 1; }
+
+    .phone-status {
+      position: absolute;
+      bottom: 20px; right: 20px;
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 600; color: #8892b0;
+      background: rgba(0,0,0,0.5); padding: 8px 16px; border-radius: 20px;
+    }
+    
+    .phone-dot {
+      width: 10px; height: 10px; border-radius: 50%; background: #555;
+    }
+    .phone-dot.connected { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    
+    .final-score {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.9);
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      z-index: 50;
+      opacity: 0; pointer-events: none; transition: opacity 1s;
+    }
+    .final-score.active { opacity: 1; pointer-events: auto; }
+    .final-score h2 { font-size: 3rem; color: #8892b0; margin-bottom: 20px; }
+    .final-score .score { font-size: 8rem; color: var(--accent); line-height: 1; margin-bottom: 40px; }
+
+  </style>
+</head>
+<body>
+
+  <div id="setup-screen">
+    <div class="logo">POV CRICKET</div>
+    <div class="setup-box">
+      <div class="input-group">
+        <label>SERVER IP ADDRESS</label>
+        <input type="text" id="ip-input" placeholder="e.g. 192.168.1.5" value="localhost">
+      </div>
+      <div class="input-group">
+        <label>PORT</label>
+        <input type="text" id="port-input" value="8080">
+      </div>
+      <button class="primary" id="start-btn">START GAME</button>
+    </div>
+  </div>
+
+  <div id="game-screen">
+    <canvas id="gameCanvas"></canvas>
+    <div class="hud">
+      <div class="score-bar">
+        <div class="runs-wickets"><span id="hud-runs">0</span>/<span id="hud-wickets">0</span></div>
+        <div class="over-info">
+          <div class="over-label" id="hud-over">OVER 0.0</div>
+          <div class="over-history" id="hud-history"></div>
+        </div>
+        <div class="run-rate">
+          <div id="hud-rr">RR 0.00</div>
+          <div class="balls-left" id="hud-balls">36 BALLS LEFT</div>
+        </div>
+      </div>
+      <div class="status-pill" id="status-pill">WAITING FOR CONNECTION...</div>
+      
+      <div class="result-overlay" id="result-overlay">SIX!</div>
+      <div class="footwork-tag condensed" id="footwork-tag">▲ FRONT FOOT</div>
+      
+      <div class="phone-status">
+        <div class="phone-dot" id="phone-dot"></div>
+        <span id="phone-lbl">PHONE DISCONNECTED</span>
+      </div>
+    </div>
+    
+    <div class="final-score" id="final-score">
+      <h2>INNINGS COMPLETE</h2>
+      <div class="score"><span id="final-runs">0</span>/<span id="final-wickets">0</span></div>
+      <button class="primary" style="width: 250px" onclick="location.reload()">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <script>
+    // Config
+    const IP_KEY = 'pov_cricket_pc_ip';
+    const PORT_KEY = 'pov_cricket_pc_port';
+    const MAX_BALLS = 36;
+
+    // UI Elements
+    const setupScreen = document.getElementById('setup-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const ipInput = document.getElementById('ip-input');
+    const portInput = document.getElementById('port-input');
+    const startBtn = document.getElementById('start-btn');
+    const statusPill = document.getElementById('status-pill');
+    
+    // HUD Elements
+    const hudRuns = document.getElementById('hud-runs');
+    const hudWickets = document.getElementById('hud-wickets');
+    const hudOver = document.getElementById('hud-over');
+    const hudHistory = document.getElementById('hud-history');
+    const hudRR = document.getElementById('hud-rr');
+    const hudBalls = document.getElementById('hud-balls');
+    const phoneDot = document.getElementById('phone-dot');
+    const phoneLbl = document.getElementById('phone-lbl');
+    const resultOverlay = document.getElementById('result-overlay');
+    const footworkTag = document.getElementById('footwork-tag');
+    
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Game State
+    let runs = 0;
+    let wickets = 0;
+    let ballsBowled = 0;
+    let overHistory = [];
+    
+    let ws = null;
+    let isConnected = false;
+    let phoneConnected = false;
+    let targetIp = '';
+    let targetPort = '';
+    let autoReconnectId = null;
+
+    // Bat Prediction State
+    let targetBat = { beta: 0, gamma: 0, alpha: 0 };
+    let smoothBat = { beta: 0, gamma: 0, alpha: 0 };
+    let swingTrailFrames = 0;
+
+    // Delivery System State
+    let deliveryState = 'IDLE'; // IDLE, DELIVERY, RESULT, END
+    let deliveryWindowOpen = false;
+    let shotFired = false;
+    
+    // Ball State
+    let ball = {
+      active: false,
+      x: 0, y: 0, z: 0,
+      size: 4,
+      bounced: false,
+      bounceZ: 0.58,
+      bounceY: 0,
+      speed: 130, // km/h
+      ballLength: 'good',
+      ballLine: 'middle',
+      startTime: 0,
+      totalMs: 500,
+      trail: []
+    };
+    
+    // Trims
+    let shotTrajectory = null; // { points: [], color: '', active: false, timer: 0 }
+
+    // Init
+    ipInput.value = localStorage.getItem(IP_KEY) || 'localhost';
+    portInput.value = localStorage.getItem(PORT_KEY) || '8080';
+
+    startBtn.addEventListener('click', () => {
+      localStorage.setItem(IP_KEY, ipInput.value);
+      localStorage.setItem(PORT_KEY, portInput.value);
+      targetIp = ipInput.value;
+      targetPort = portInput.value;
+
+      setupScreen.style.display = 'none';
+      gameScreen.classList.add('active');
+      
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+      
+      initScene();
+      connectWebSocket();
+      requestAnimationFrame(renderLoop);
+    });
+
+    // --- NETWORKING ---
+
+    function connectWebSocket() {
+      if (ws) ws.close();
+      
+      const url = `ws://${targetIp}:${targetPort}/game`;
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        isConnected = true;
+        updateStatusPill('CONNECTED TO SERVER');
+      };
+
+      ws.onclose = () => {
+        isConnected = false;
+        phoneConnected = false;
+        updatePhoneStatus();
+        updateStatusPill('CONNECTION LOST. RECONNECTING...');
+        clearTimeout(autoReconnectId);
+        autoReconnectId = setTimeout(connectWebSocket, 3000);
+      };
+
+      ws.onerror = () => ws.close();
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          handleMessage(msg);
+        } catch(err) {}
+      };
+    }
+
+    function sendMsg(obj) {
+      if (isConnected && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(obj));
+      }
+    }
+
+    function handleMessage(msg) {
+      if (msg.type === 'phone_connected') {
+        phoneConnected = true;
+        updatePhoneStatus();
+        if (deliveryState === 'IDLE' && ballsBowled < MAX_BALLS) {
+          setTimeout(scheduleNextDelivery, 2000);
+        }
+      } else if (msg.type === 'phone_disconnected') {
+        phoneConnected = false;
+        updatePhoneStatus();
+      } else if (msg.type === 'calibrated') {
+        updateStatusPill('BAT CALIBRATED');
+      } else if (msg.type === 'orientation') {
+        targetBat.beta = msg.beta;
+        targetBat.gamma = msg.gamma;
+        targetBat.alpha = msg.alpha;
+      } else if (msg.type === 'shot') {
+        processShot(msg);
+      }
+    }
+
+    // --- HUD UPDATES ---
+
+    function updatePhoneStatus() {
+      if (phoneConnected) {
+        phoneDot.classList.add('connected');
+        phoneLbl.innerText = 'PHONE CONNECTED';
+      } else {
+        phoneDot.classList.remove('connected');
+        phoneLbl.innerText = 'WAITING FOR PHONE...';
+      }
+    }
+
+    function updateStatusPill(text) {
+      statusPill.innerText = text;
+    }
+
+    function updateScoreboard() {
+      hudRuns.innerText = runs;
+      hudWickets.innerText = wickets;
+      
+      const overs = Math.floor(ballsBowled / 6);
+      const balls = ballsBowled % 6;
+      hudOver.innerText = `OVER ${overs}.${balls}`;
+      
+      const rr = ballsBowled > 0 ? (runs / (ballsBowled / 6)).toFixed(2) : '0.00';
+      hudRR.innerText = `RR ${rr}`;
+      
+      hudBalls.innerText = `${MAX_BALLS - ballsBowled} BALLS LEFT`;
+
+      // Over history pill dots
+      hudHistory.innerHTML = '';
+      overHistory.forEach(r => {
+        const dot = document.createElement('div');
+        dot.className = 'ball-dot';
+        if (r === 'W') { dot.classList.add('out'); dot.innerText = 'W'; }
+        else if (r === 6) { dot.classList.add('six'); dot.innerText = '6'; }
+        else if (r === 4) { dot.classList.add('four'); dot.innerText = '4'; }
+        else if (r === 0) { dot.classList.add('dot'); }
+        else { dot.classList.add('run'); dot.innerText = r; }
+        hudHistory.appendChild(dot);
+      });
+      
+      if (ballsBowled >= MAX_BALLS || wickets >= 10) {
+        endInnings();
+      }
+    }
+
+    function showResultOverlay(type, text) {
+      resultOverlay.className = 'result-overlay';
+      resultOverlay.classList.add(`result-${type}`);
+      resultOverlay.innerText = text;
+      
+      // trigger reflow
+      void resultOverlay.offsetWidth;
+      resultOverlay.classList.add('active');
+      
+      setTimeout(() => resultOverlay.classList.remove('active'), 2000);
+    }
+
+    function showFootwork(type) {
+      if (type === 'front') {
+        footworkTag.innerText = '▲ FRONT FOOT';
+      } else {
+        footworkTag.innerText = '▼ BACK FOOT';
+      }
+      footworkTag.classList.add('active');
+      setTimeout(() => footworkTag.classList.remove('active'), 1500);
+    }
+
+    // --- DELIVERY ENGINE ---
+
+    function scheduleNextDelivery() {
+      if (!phoneConnected || ballsBowled >= MAX_BALLS || wickets >= 10) return;
+      deliveryState = 'IDLE';
+      
+      const speeds = [110, 125, 138, 145, 152];
+      const speed = speeds[Math.floor(Math.random() * speeds.length)];
+      
+      const lengths = ['full', 'good', 'short'];
+      const blen = lengths[Math.floor(Math.random() * lengths.length)];
+      
+      const lines = ['outside_off', 'offStump', 'middle', 'legStump', 'outside_leg'];
+      const bline = lines[Math.floor(Math.random() * lines.length)];
+
+      updateStatusPill(`${speed} KM/H · ${blen.replace('_',' ').toUpperCase()} LENGTH · ${bline.replace('_',' ').toUpperCase()}`);
+
+      // Auto footwork (Workaround #5)
+      let foot = 'front';
+      if (blen === 'short') foot = 'back';
+      else if (blen === 'good') foot = Math.random() > 0.5 ? 'front' : 'back';
+      showFootwork(foot);
+
+      setTimeout(() => {
+        startDelivery(speed, blen, bline);
+      }, 1500);
+    }
+
+    function startDelivery(speed, length, line) {
+      deliveryState = 'DELIVERY';
+      deliveryWindowOpen = true;
+      shotFired = false;
+      shotTrajectory = null;
+
+      sendMsg({ type: "delivery_start", ballLength: length, ballLine: line, speed: speed });
+
+      ball.active = true;
+      ball.speed = speed;
+      ball.ballLength = length;
+      ball.ballLine = line;
+      
+      if (length === 'full') ball.bounceZ = 0.72;
+      else if (length === 'good') ball.bounceZ = 0.58;
+      else ball.bounceZ = 0.40;
+
+      // X mapping (at bounce)
+      let lineX = 0;
+      if (line === 'outside_off') lineX = -0.15;
+      if (line === 'offStump') lineX = -0.05;
+      if (line === 'middle') lineX = 0;
+      if (line === 'legStump') lineX = 0.05;
+      if (line === 'outside_leg') lineX = 0.15;
+
+      ball.startX = lineX * 0.2; // slight angle from bowler hand
+      ball.targetX = lineX;
+      ball.x = ball.startX;
+      ball.y = 0;
+      ball.z = 0.02;
+      ball.bounced = false;
+      
+      // Calculate total flight MS based on speed
+      // 140kmh = 38.8 m/s. Pitch 20m -> ~515ms. Add reaction padding
+      ball.totalMs = (20 / (speed * 1000 / 3600)) * 1000 + 100;
+      ball.startTime = Date.now();
+    }
+
+    function endDelivery(outcome, runsScored) {
+      if (deliveryState === 'RESULT') return;
+      deliveryState = 'RESULT';
+      deliveryWindowOpen = false;
+      
+      sendMsg({ type: "delivery_end" });
+      sendMsg({ type: "result", outcome, runs: runsScored });
+
+      let dotStr = '';
+      if (outcome === 'out') {
+        wickets++;
+        dotStr = 'W';
+        showResultOverlay('out', 'OUT!');
+      } else if (outcome === 'leave') {
+        dotStr = 0;
+        showResultOverlay('leave', 'LEAVE');
+      } else {
+        runs += runsScored;
+        dotStr = runsScored;
+        if (runsScored === 6) showResultOverlay('six', 'SIX!');
+        else if (runsScored === 4) showResultOverlay('four', 'FOUR!');
+        else if (runsScored === 0) showResultOverlay('leave', 'DOT BALL');
+        else showResultOverlay('leave', runsScored + ' RUN' + (runsScored > 1 ? 'S' : ''));
+        
+        if (runsScored > 0) {
+          createTrajectory(runsScored);
+        }
+      }
+
+      ballsBowled++;
+      overHistory.push(dotStr);
+      if (overHistory.length > 6) overHistory.shift();
+      
+      updateScoreboard();
+
+      setTimeout(scheduleNextDelivery, outcome === 'out' ? 4000 : 2800);
+    }
+
+    // --- SHOT RESULT ENGINE ---
+
+    function processShot(shotData) {
+      if (!deliveryWindowOpen || shotFired || deliveryState !== 'DELIVERY') return;
+      shotFired = true;
+      ball.active = false; // Hide ball immediately after hit
+
+      const z = ball.z;
+      let timing = 'good';
+      if (z < 0.82) timing = 'early';
+      else if (z > 0.92) timing = 'late';
+
+      const timingMulti = timing === 'good' ? 1.0 : timing === 'early' ? 0.75 : 0.60;
+      const effectivePower = shotData.power * timingMulti;
+
+      let outcome = 'runs';
+      let r = 0;
+
+      const type = shotData.shotType;
+      const line = ball.ballLine;
+      const length = ball.ballLength;
+
+      // Logic overrides
+      if (type === 'sweep') {
+        if (line === 'outside_off') { outcome = 'out'; }
+        else if (effectivePower > 0.75) { r = 4; }
+        else if (effectivePower > 0.40) { r = 2; }
+        else { r = 1; }
+      } 
+      else if (type === 'pull' || type === 'hook') {
+        if (length === 'full') { outcome = 'out'; }
+        else if (effectivePower > 0.80) { r = 6; }
+        else if (effectivePower > 0.55) { r = 4; }
+        else { r = 2; }
+      }
+      else if (type === 'power_drive') {
+        if (effectivePower > 0.85) { r = 6; }
+        else if (effectivePower > 0.60) { r = 4; }
+        else { r = 2; }
+      }
+      else if (type === 'cut') {
+        if (length === 'full') { outcome = 'out'; }
+        else if (effectivePower > 0.65) { r = 4; }
+        else { r = 2; }
+      }
+      else if (type === 'glance') {
+        if (line === 'outside_off') { outcome = 'out'; }
+        else if (effectivePower > 0.70) { r = 4; }
+        else { r = 2; }
+      }
+      else { // drive
+        if (timing === 'good' && effectivePower > 0.80) { r = 4; }
+        else if (timing === 'good' && effectivePower > 0.50) { r = 2; }
+        else if (effectivePower < 0.20 && timing !== 'good') { outcome = 'out'; }
+        else { r = 1; }
+      }
+
+      // Catch probability
+      if (outcome !== 'out' && effectivePower < 0.15 && timing !== 'good') {
+        if (Math.random() < 0.4) outcome = 'out';
+      }
+
+      endDelivery(outcome, r);
+    }
+
+    function createTrajectory(runs) {
+      if (runs <= 0) return;
+      
+      let baseAngle = targetBat.alpha + targetBat.gamma * 0.5;
+      
+      // Points
+      let pts = [];
+      let steps = 15;
+      let maxHeight = runs === 6 ? 0.6 : runs === 4 ? 0.2 : 0.1;
+      let targetZ = runs === 6 ? 0.3 : 0.6; // Farther z for sixes
+
+      for (let i=0; i<=steps; i++) {
+        let t = i / steps;
+        // parabolic curve
+        let z = 1.0 - (1.0 - targetZ) * t;
+        let y = Math.sin(t * Math.PI) * maxHeight;
+        let pX = ball.x + (baseAngle * 0.005) * t;
+        pts.push({ x: pX, y: y, z: z });
+      }
+
+      let color = varColor('--green');
+      if (runs === 6) color = varColor('--accent');
+      if (runs === 4) color = varColor('--blue');
+
+      shotTrajectory = {
+        points: pts,
+        color: color,
+        active: true,
+        timer: 1.0 // 100% opacity, fades over renderFrames
+      };
+    }
+
+    function endInnings() {
+      document.getElementById('final-runs').innerText = runs;
+      document.getElementById('final-wickets').innerText = wickets;
+      document.getElementById('final-score').classList.add('active');
+    }
+
+    // --- RENDERING PIPELINE ---
+
+    let cvsW, cvsH;
+    let horizonY, creaseY, pitchW;
+
+    function resizeCanvas() {
+      cvsW = canvas.clientWidth * window.devicePixelRatio;
+      cvsH = canvas.clientHeight * window.devicePixelRatio;
+      canvas.width = cvsW;
+      canvas.height = cvsH;
+      
+      horizonY = cvsH * 0.38;
+      creaseY = cvsH * 0.72;
+    }
+
+    function projectY(z) {
+      return horizonY + (creaseY - horizonY) * Math.pow(z, 1.2);
+    }
+    
+    function projectX(x, z) {
+      let cx = cvsW / 2;
+      let w = (cvsW * 0.8) * Math.pow(z, 1.2); 
+      return cx + (x * w);
+    }
+    
+    function projectSize(s, z) {
+      return s * Math.max(0.1, Math.pow(z, 1.2));
+    }
+
+    let stars = [];
+    function initScene() {
+      for(let i=0; i<80; i++) {
+        stars.push({
+          x: Math.random() * 100,
+          y: Math.random() * 38,
+          s: Math.random() * 2,
+          a: Math.random() * 0.5 + 0.1
+        });
+      }
+    }
+
+    function renderLoop() {
+      if (!gameScreen.classList.contains('active')) {
+        requestAnimationFrame(renderLoop);
+        return;
+      }
+
+      // 1. Sky
+      let skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY);
+      skyGrad.addColorStop(0, '#02050a');
+      skyGrad.addColorStop(1, '#0a1d3a');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, cvsW, horizonY);
+
+      stars.forEach(s => {
+        ctx.fillStyle = `rgba(255,255,255,${s.a})`;
+        ctx.fillRect(s.x * cvsW/100, s.y * cvsH/100, s.s*window.devicePixelRatio, s.s*window.devicePixelRatio);
+      });
+
+      // Floodlights glares
+      const lights = [
+        {x: 0.1, y: 0.1}, {x: 0.3, y: 0.15}, {x: 0.7, y: 0.15}, {x: 0.9, y: 0.1}
+      ];
+      lights.forEach(l => {
+        let lx = l.x * cvsW; let ly = l.y * cvsH;
+        let g = ctx.createRadialGradient(lx, ly, 0, lx, ly, 150);
+        g.addColorStop(0, 'rgba(255,255,255,0.4)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(lx, ly, 150, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(lx, ly, 3, 0, Math.PI*2); ctx.fill();
+      });
+
+      // 2. Stadium & Crowd
+      ctx.fillStyle = '#060a14';
+      ctx.beginPath();
+      ctx.moveTo(0, horizonY);
+      for(let i=0; i<=20; i++) {
+        let phY = horizonY - 15 - Math.sin(i)*10;
+        ctx.lineTo((i/20)*cvsW, phY);
+      }
+      ctx.lineTo(cvsW, horizonY);
+      ctx.fill();
+
+      // Colored crowd dots
+      for(let i=0; i<150; i++) {
+        let cx = (Math.sin(i*7.3)*0.5+0.5) * cvsW;
+        let cy = horizonY - 5 - (Math.cos(i*3.1)*0.5+0.5) * 20;
+        ctx.fillStyle = ['#f5a623', '#ff3b30', '#007aff', '#34c759', '#fff'][i%5] + '80';
+        ctx.fillRect(cx, cy, 2, 2);
+      }
+
+      // 3. Outfield
+      let outGrad = ctx.createLinearGradient(0, horizonY, 0, cvsH);
+      outGrad.addColorStop(0, '#0a2e15');
+      outGrad.addColorStop(1, '#114a22');
+      ctx.fillStyle = outGrad;
+      ctx.fillRect(0, horizonY, cvsW, cvsH - horizonY);
+
+      // Dash circle
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 1 * window.devicePixelRatio;
+      ctx.setLineDash([10, 10]);
+      ctx.beginPath();
+      ctx.ellipse(cvsW/2, horizonY + (cvsH-horizonY)*0.4, cvsW*0.6, (cvsH-horizonY)*0.3, 0, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 4. Pitch
+      ctx.fillStyle = '#c49a6c';
+      let pTopW = cvsW * 0.1;
+      let pBotW = cvsW * 0.6;
+      ctx.beginPath();
+      ctx.moveTo(cvsW/2 - pTopW/2, horizonY + 10);
+      ctx.lineTo(cvsW/2 + pTopW/2, horizonY + 10);
+      ctx.lineTo(cvsW/2 + pBotW/2, cvsH);
+      ctx.lineTo(cvsW/2 - pBotW/2, cvsH);
+      ctx.fill();
+
+      // Seam line
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.lineWidth = 2 * window.devicePixelRatio;
+      ctx.beginPath();
+      ctx.moveTo(cvsW/2, horizonY + 10);
+      ctx.lineTo(cvsW/2, cvsH);
+      ctx.stroke();
+
+      // 5. Creases
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 4 * window.devicePixelRatio;
+      // Batting
+      ctx.beginPath();
+      ctx.moveTo(cvsW/2 - pBotW/2.2, creaseY);
+      ctx.lineTo(cvsW/2 + pBotW/2.2, creaseY);
+      ctx.stroke();
+      // Popping
+      let popY = projectY(0.95);
+      let popW = (cvsW * 0.5) * Math.pow(0.95, 1.2);
+      ctx.beginPath();
+      ctx.moveTo(cvsW/2 - popW, popY);
+      ctx.lineTo(cvsW/2 + popW, popY);
+      ctx.stroke();
+
+      // 6. Stumps
+      let farY = projectY(0.01);
+      let stW = 2 * window.devicePixelRatio;
+      let stH = 15 * window.devicePixelRatio;
+      let sX = cvsW/2;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(sX - 8, farY - stH, stW, stH);
+      ctx.fillRect(sX - 1, farY - stH, stW, stH);
+      ctx.fillRect(sX + 6, farY - stH, stW, stH);
+      // Bails
+      ctx.fillRect(sX - 8, farY - stH, 7, stW);
+      ctx.fillRect(sX - 1, farY - stH, 7, stW);
+
+      // 7. Fielders
+      const fielders = [
+        {x:-0.3, z:0.2}, {x:0.3, z:0.2}, {x:-0.5, z:0.5}, {x:0.5, z:0.5},
+        {x:-0.8, z:0.7}, {x:0.8, z:0.7}, {x:-0.2, z:0.8}, {x:0.2, z:0.8}, {x:0, z:0.1}
+      ];
+      fielders.forEach(f => {
+        let fY = projectY(f.z);
+        let fX = projectX(f.x, f.z);
+        let s = projectSize(10, f.z);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1 * window.devicePixelRatio;
+        ctx.beginPath(); ctx.arc(fX, fY - s, s, 0, Math.PI*2);
+        ctx.fill(); ctx.stroke();
+      });
+
+      // --- BALL PHYSICS & RENDERING ---
+      if (ball.active && deliveryState === 'DELIVERY') {
+        let elapsed = Date.now() - ball.startTime;
+        let t = Math.min(1.0, elapsed / ball.totalMs);
+        
+        ball.z = 0.02 + t * 0.98;
+        ball.x = ball.startX + (ball.targetX - ball.startX) * t;
+
+        // Bounce logic
+        if (ball.z > ball.bounceZ && !ball.bounced) {
+          ball.bounced = true;
+        }
+
+        if (!ball.bounced) {
+          let dropT = ball.z / ball.bounceZ;
+          ball.y = -0.1 * (1 - dropT) * (1 - dropT); // arc dropping
+        } else {
+          let riseT = (ball.z - ball.bounceZ) / (1.0 - ball.bounceZ);
+          // Parabola: peaks at 0.5, 0 at 0 and 1
+          ball.y = -0.15 * Math.sin(riseT * Math.PI);
+        }
+
+        // Draw shadow
+        let bY = projectY(ball.z);
+        let bX = projectX(ball.x, ball.z);
+        let bSize = projectSize(ball.size, ball.z);
+        let actY = bY + ball.y * cvsH * 0.2; // mapping visual height
+
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath();
+        ctx.ellipse(bX, bY, bSize, bSize * 0.4, 0, 0, Math.PI*2);
+        ctx.fill();
+
+        // Draw Ball
+        let bgGrad = ctx.createRadialGradient(bX - bSize*0.3, actY - bSize*0.3, 0, bX, actY, bSize);
+        bgGrad.addColorStop(0, '#ff6b6b');
+        bgGrad.addColorStop(1, '#a30000');
+        
+        ctx.shadowColor = 'rgba(255, 59, 48, 0.6)';
+        ctx.shadowBlur = bSize;
+        ctx.fillStyle = bgGrad;
+        ctx.beginPath(); ctx.arc(bX, actY, bSize, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Seam
+        ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+        ctx.lineWidth = Math.max(1, bSize * 0.1);
+        ctx.beginPath(); ctx.arc(bX, actY, bSize, 0, Math.PI, false); ctx.stroke();
+
+        // Default Leave Workaround
+        if (ball.z > 0.97 && deliveryWindowOpen) {
+          endDelivery('leave', 0);
+        }
+      }
+
+      // --- SHOT TRAJECTORY ---
+      if (shotTrajectory && shotTrajectory.active) {
+        ctx.strokeStyle = shotTrajectory.color;
+        ctx.lineWidth = 3 * window.devicePixelRatio;
+        ctx.setLineDash([10, 5]);
+        ctx.beginPath();
+        
+        let pts = shotTrajectory.points;
+        for(let i=0; i<pts.length; i++) {
+          let p = pts[i];
+          let pY = projectY(p.z) + p.y * cvsH * 0.5;
+          let pX = projectX(p.x, p.z);
+          if (i===0) ctx.moveTo(pX, pY);
+          else ctx.lineTo(pX, pY);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        let l = pts[pts.length-1];
+        let lY = projectY(l.z) + l.y * cvsH * 0.5;
+        let lX = projectX(l.x, l.z);
+        
+        ctx.fillStyle = shotTrajectory.color;
+        ctx.beginPath(); ctx.arc(lX, lY, 6 * window.devicePixelRatio, 0, Math.PI*2); ctx.fill();
+
+        shotTrajectory.timer -= 0.02;
+        if (shotTrajectory.timer <= 0) shotTrajectory.active = false;
+        ctx.globalAlpha = Math.max(0, shotTrajectory.timer);
+        ctx.globalAlpha = 1.0; // Reset
+      }
+
+      // --- BAT RENDERING (Workaround 4) ---
+      // Lerp smoothing
+      smoothBat.beta += (targetBat.beta - smoothBat.beta) * 0.18;
+      smoothBat.gamma += (targetBat.gamma - smoothBat.gamma) * 0.18;
+      smoothBat.alpha += (targetBat.alpha - smoothBat.alpha) * 0.18;
+
+      let drawBat = (alpha, beta, gamma, opacity) => {
+        let batBaseY = cvsH * 0.76;
+        let batBaseX = cvsW / 2 + (gamma * cvsW * 0.005); // Translate lateral based on gamma
+        batBaseY += (beta * cvsH * 0.002); // translate slight vertical
+
+        ctx.save();
+        ctx.globalAlpha = opacity;
+        ctx.translate(batBaseX, batBaseY);
+        
+        // Perspective rotation (gamma)
+        ctx.rotate(gamma * 0.5 * Math.PI / 180);
+
+        let pxSc = window.devicePixelRatio;
+        let w = 40 * pxSc;
+        let h = 250 * pxSc;
+        let hw = 15 * pxSc;
+        let hh = 70 * pxSc;
+
+        // Shadow
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 15;
+        ctx.shadowOffsetX = 10;
+        ctx.shadowOffsetY = 10;
+
+        // Draw Handle
+        ctx.fillStyle = '#222';
+        ctx.fillRect(-hw/2, -h, hw, hh);
+        
+        // Grip lines
+        ctx.strokeStyle = '#666';
+        ctx.lineWidth = 3 * pxSc;
+        for(let i=0; i<5; i++) {
+          ctx.beginPath();
+          ctx.moveTo(-hw/2, -h + 10*pxSc + i*10*pxSc);
+          ctx.lineTo(hw/2, -h + 15*pxSc + i*10*pxSc);
+          ctx.stroke();
+        }
+
+        // Draw Blade
+        let grad = ctx.createLinearGradient(-w/2, 0, w/2, 0);
+        grad.addColorStop(0, '#ebc89d');
+        grad.addColorStop(0.5, '#ffdca8');
+        grad.addColorStop(1, '#dbba91');
+        
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.roundRect(-w/2, -h + hh, w, h - hh, 5 * pxSc);
+        ctx.fill();
+
+        // Details
+        ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+        ctx.lineWidth = 1.5 * pxSc;
+        for(let i=1; i<=4; i++) {
+          let by = -h + hh + ((h-hh)/5)*i;
+          ctx.beginPath(); ctx.moveTo(-w/2 + 3*pxSc, by); ctx.lineTo(w/2 - 3*pxSc, by); ctx.stroke();
+        }
+
+        ctx.restore();
+      };
+
+      // Swing Trail Ghost
+      if (Math.abs(targetBat.gamma - smoothBat.gamma) > 5) {
+        drawBat(targetBat.alpha, targetBat.beta, targetBat.gamma, 0.12);
+      }
+      
+      // Main Bat
+      drawBat(smoothBat.alpha, smoothBat.beta, smoothBat.gamma, 1.0);
+
+      requestAnimationFrame(renderLoop);
+    }
+    
+    function varColor(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+  </script>
+</body>
+</html>
