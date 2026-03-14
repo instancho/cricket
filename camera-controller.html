@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>POV Cricket - Camera Controller</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;800&family=Barlow:wght@400;600&display=swap" rel="stylesheet">
+  
+  <!-- MediaPipe Pose Requirements -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+
+  <style>
+    :root {
+      --bg-color: #060e1a;
+      --accent: #f5a623;
+      --text: #ffffff;
+      --red: #ff3b30;
+      --blue: #007aff;
+      --green: #34c759;
+    }
+    
+    * { box-sizing: border-box; }
+    
+    body {
+      margin: 0;
+      background-color: var(--bg-color);
+      color: var(--text);
+      font-family: 'Barlow', sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Screen Management */
+    #setup-screen, #game-screen {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      transition: opacity 0.3s;
+    }
+
+    /* Setup Screen */
+    #setup-screen {
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      z-index: 100;
+      background: var(--bg-color);
+    }
+
+    #setup-screen h1 {
+      font-size: 3rem;
+      font-family: 'Barlow Condensed', sans-serif;
+      color: var(--accent);
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 300px;
+      margin-bottom: 1.5rem;
+    }
+
+    .input-group input {
+      padding: 12px 16px;
+      font-size: 1.5rem;
+      text-align: center;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: white;
+      border-radius: 8px;
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: var(--bg-color);
+      border: none;
+      padding: 16px 32px;
+      font-size: 1.5rem;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 800;
+      border-radius: 8px;
+      width: 100%;
+      max-width: 300px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(245, 166, 35, 0.3);
+    }
+
+    /* Game Screen */
+    #game-screen {
+      opacity: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #game-screen.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 20px;
+      background: rgba(0,0,0,0.8);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      z-index: 10;
+    }
+
+    .status-indicator {
+      display: flex; align-items: center; gap: 8px; font-weight: 600; color: #8892b0;
+    }
+
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--red); box-shadow: 0 0 8px var(--red); }
+    .dot.connected { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .dot.camera-on { background: var(--blue); box-shadow: 0 0 8px var(--blue); }
+
+    .main-view {
+      flex: 1;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #input-video {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      object-fit: contain;
+      opacity: 0.4;
+      transform: scaleX(-1); /* Mirror camera */
+    }
+
+    #output-canvas {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 5;
+      transform: scaleX(-1); /* Mirror overlay matches video */
+    }
+
+    .hud-overlay {
+      position: absolute;
+      bottom: 20px; left: 20px; right: 20px;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    .metrics {
+      background: rgba(0,0,0,0.6);
+      padding: 10px 15px;
+      border-radius: 8px;
+      font-family: monospace;
+      color: rgba(255,255,255,0.7);
+      font-size: 0.9rem;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .instruction-overlay {
+      position: absolute;
+      top: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(245,166,35,0.9);
+      color: #000;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-weight: bold;
+      z-index: 15;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 1.2rem;
+    }
+    
+    .hidden { display: none !important; }
+
+    /* Result Overlay */
+    #result-overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      display: flex; justify-content: center; align-items: center;
+      z-index: 20; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    #result-overlay.visible { opacity: 1; }
+    .result-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.3; z-index: -1; }
+    .result-text {
+      font-family: 'Barlow Condensed', sans-serif; font-size: 6rem; font-weight: 800;
+      text-transform: uppercase; text-shadow: 0 0 30px currentColor;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SETUP SCREEN -->
+  <div id="setup-screen">
+    <h1>POV CRICKET<br><span style="color: #fff; font-size: 1.5rem">CAMERA TRACKING</span></h1>
+    <div class="input-group">
+      <input type="number" id="code-input" placeholder="ROOM CODE" max="9999">
+    </div>
+    <button class="primary" id="start-btn">ALLOW CAMERA & JOIN</button>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="game-screen">
+    <div class="top-bar">
+      <div class="status-indicator">
+        <div class="dot" id="cam-dot"></div>
+        <span id="cam-lbl">CAMERA OFF</span>
+      </div>
+      <div class="status-indicator">
+        <div class="dot" id="conn-dot"></div>
+        <span id="conn-lbl">DISCONNECTED</span>
+      </div>
+    </div>
+    
+    <div class="main-view">
+      <video id="input-video" playsinline></video>
+      <canvas id="output-canvas"></canvas>
+      <div class="instruction-overlay" id="instruction-pill">STAND BACK & HOLD IMAGINARY BAT</div>
+      
+      <div class="hud-overlay">
+        <div class="metrics" id="metrics-disp">
+          A: 0.0 | B: 0.0 | G: 0.0<br>
+          Accel: 0.0
+        </div>
+      </div>
+    </div>
+
+    <div id="result-overlay">
+      <div class="result-bg" id="result-bg"></div>
+      <div class="result-text" id="result-text">SIX!</div>
+    </div>
+  </div>
+
+  <script>
+    // Config
+    const CODE_KEY = 'pov_cricket_room_code';
+
+    // UI Elements
+    const setupScreen = document.getElementById('setup-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const codeInput = document.getElementById('code-input');
+    const startBtn = document.getElementById('start-btn');
+    const connDot = document.getElementById('conn-dot');
+    const connLbl = document.getElementById('conn-lbl');
+    const camDot = document.getElementById('cam-dot');
+    const camLbl = document.getElementById('cam-lbl');
+    const metricsDisp = document.getElementById('metrics-disp');
+    
+    const videoElement = document.getElementById('input-video');
+    const canvasElement = document.getElementById('output-canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+
+    // State
+    let ws = null;
+    let roomCode = '';
+    let isConnected = false;
+    let deliveryWindowOpen = false;
+    let poseActive = false;
+
+    // Bat Math State
+    let curAlpha = 0; // Yaw (Left/Right aim)
+    let curBeta = 0;  // Pitch (Lift/Chop)
+    let curGamma = 0; // Roll (Twist)
+    
+    // Smoothers
+    let smoothAlpha=0, smoothBeta=0, smoothGamma=0;
+
+    // Swing Tracker
+    let swingActive = false;
+    let swingStartTime = 0;
+    let maxAccel = 0;
+    let impactA=0, impactB=0, impactG=0;
+    let prevWristAvg = {x: 0, y: 0, z: 0};
+    let lastTime = Date.now();
+
+    // Setup
+    codeInput.value = localStorage.getItem(CODE_KEY) || '';
+
+    startBtn.addEventListener('click', () => {
+      roomCode = codeInput.value.trim();
+      if (roomCode.length !== 4) {
+        alert('Please enter a valid 4-digit room code.');
+        return;
+      }
+      localStorage.setItem(CODE_KEY, roomCode);
+
+      setupScreen.style.display = 'none';
+      gameScreen.classList.add('active');
+      
+      initCameraAndPose();
+      connectWebSocket();
+    });
+
+    // --- WEBSOCKET --- //
+
+    function connectWebSocket() {
+      if (ws) ws.close();
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${location.host}/phone/${roomCode}`);
+
+      ws.onopen = () => {
+        isConnected = true;
+        connDot.classList.add('connected');
+        connLbl.innerText = 'CONNECTED';
+      };
+
+      ws.onclose = () => {
+        isConnected = false;
+        connDot.classList.remove('connected');
+        connLbl.innerText = 'RECONNECTING...';
+        setTimeout(connectWebSocket, 2000);
+      };
+
+      ws.onerror = () => ws.close();
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'delivery_start') {
+            deliveryWindowOpen = true;
+          } else if (msg.type === 'delivery_end') {
+            deliveryWindowOpen = false;
+          } else if (msg.type === 'result') {
+            showShotResult(msg.outcome, msg.runs);
+          }
+        } catch(err) {}
+      };
+    }
+
+    function sendMsg(obj) {
+      if (isConnected && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(obj));
+      }
+    }
+
+    // --- MEDIAPIPE POSE --- //
+
+    function initCameraAndPose() {
+      camLbl.innerText = 'LOADING AI...';
+
+      const pose = new Pose({locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+      }});
+
+      pose.setOptions({
+        modelComplexity: 1, // 0 = fast, 1 = smooth, 2 = heavy
+        smoothLandmarks: true,
+        enableSegmentation: false,
+        smoothSegmentation: false,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
+
+      pose.onResults(onPoseResults);
+
+      const camera = new Camera(videoElement, {
+        onFrame: async () => {
+          await pose.send({image: videoElement});
+        },
+        width: 1280,
+        height: 720
+      });
+
+      camera.start().then(() => {
+        camDot.classList.add('camera-on');
+        camLbl.innerText = 'TRACKING';
+      }).catch(err => {
+        alert("Camera access denied or failed: " + err);
+      });
+    }
+
+    function onPoseResults(results) {
+      canvasElement.width = videoElement.videoWidth;
+      canvasElement.height = videoElement.videoHeight;
+      
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      if (!results.poseLandmarks) {
+        poseActive = false;
+        return;
+      }
+      poseActive = true;
+
+      // Draw Skeleton
+      drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: 'rgba(255,255,255,0.2)', lineWidth: 4});
+      drawLandmarks(canvasCtx, results.poseLandmarks, {color: 'var(--accent)', lineWidth: 2, radius: 4});
+
+      processBodyToBat(results.poseLandmarks);
+    }
+
+    // --- BAT PHYSICS MAPPING --- //
+
+    function processBodyToBat(landmarks) {
+      // 11=L_SHLD, 12=R_SHLD, 15=L_WRIST, 16=R_WRIST
+      const lSh = landmarks[11]; const rSh = landmarks[12];
+      const lWr = landmarks[15]; const rWr = landmarks[16];
+
+      // We average wrists to find the "handle" of the bat
+      const handleX = (lWr.x + rWr.x) / 2;
+      const handleY = (lWr.y + rWr.y) / 2;
+      const handleZ = ((lWr.z || 0) + (rWr.z || 0)) / 2;
+      
+      // Calculate body center
+      const bodyX = (lSh.x + rSh.x) / 2;
+      const bodyY = (lSh.y + rSh.y) / 2;
+
+      // 1. Calculate PITCH (Beta)
+      // Height difference between shoulder line and wrists. 
+      // Negative beta is bat pointing UP, positive is down.
+      let pitchFactor = (handleY - bodyY) * 100; 
+      curBeta = pitchFactor - 30; // 30 is relatively neutral height
+
+      // 2. Calculate YAW (Alpha)
+      // Horizontal delta between center of shoulders and wrists
+      // Left/Right aim
+      let yawFactor = (handleX - bodyX) * 180;
+      // Invert yaw because camera is mirrored
+      curAlpha = -yawFactor;
+
+      // 3. Calculate ROLL (Gamma)
+      // Wrist twist / separation. If right wrist is higher than left, we roll.
+      let rollFactor = (rWr.y - lWr.y) * 200;
+      curGamma = rollFactor;
+
+      // Smooth it
+      smoothAlpha += (curAlpha - smoothAlpha) * 0.3;
+      smoothBeta += (curBeta - smoothBeta) * 0.3;
+      smoothGamma += (curGamma - smoothGamma) * 0.3;
+
+      // 4. Draw Bat Proxy on Canvas
+      drawVirtualBat(handleX * canvasElement.width, handleY * canvasElement.height);
+
+      // Stream Orientation
+      sendMsg({
+        type: 'orientation',
+        alpha: smoothAlpha,
+        beta: smoothBeta,
+        gamma: smoothGamma
+      });
+
+      // 5. Shot Acceleration Logic
+      const now = Date.now();
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+
+      if (dt > 0 && dt < 0.1) {
+        // Velocity (distance per second in normalized coords)
+        const dx = handleX - prevWristAvg.x;
+        const dy = handleY - prevWristAvg.y;
+        const speed = Math.sqrt(dx*dx + dy*dy) / dt;
+        
+        // Pseudo-acceleration map to phone values (m/s^2)
+        // 5 is a multiplier tuning value. 
+        const accel = speed * 15; 
+        
+        metricsDisp.innerHTML = `A: ${smoothAlpha.toFixed(1)} | B: ${smoothBeta.toFixed(1)} | G: ${smoothGamma.toFixed(1)}<br>Spd: ${speed.toFixed(2)} | Acc: ${accel.toFixed(1)}`;
+
+        // Process hit logic identically to the phone controller
+        if (deliveryWindowOpen) {
+          processShotDetection(accel, now);
+        }
+      }
+
+      prevWristAvg = {x: handleX, y: handleY, z: handleZ};
+    }
+
+    function processShotDetection(accel, now) {
+      if (accel > 12 && !swingActive) {
+        swingActive = true;
+        swingStartTime = now;
+        maxAccel = accel;
+        
+        impactA = smoothAlpha;
+        impactB = smoothBeta;
+        impactG = smoothGamma;
+      }
+
+      if (swingActive) {
+        if (accel > maxAccel) maxAccel = accel;
+
+        const duration = now - swingStartTime;
+        
+        // Window close trigger
+        if (accel < 8 || duration > 600) {
+          swingActive = false;
+          
+          if (duration >= 50 && maxAccel > 15) {
+            fireShot(duration);
+          }
+        }
+      }
+    }
+
+    function fireShot(duration) {
+      // Determine stroke type exactly like the phone
+      let shotType = "drive";
+      if (impactG > 30 || impactG < -30) shotType = "sweep";
+      else if (impactG > 15) shotType = "cut";
+      else if (impactG < -15) shotType = "glance";
+      else if (impactB < -15) shotType = "pull"; // Replaces hook
+      else if (impactB > 15) shotType = "power_drive";
+      
+      let power = maxAccel / 40.0;
+      if (power > 1.0) power = 1.0;
+
+      let directionAngle = impactA + (impactG * 0.5);
+
+      sendMsg({
+        type: "shot",
+        shotType: shotType,
+        power: power,
+        maxAccel: maxAccel,
+        maxRotation: 50, // Hardcoded for camera as we don't have gyro rate directly
+        duration: duration,
+        batBeta: impactB,
+        batGamma: impactG,
+        batAlpha: impactA,
+        directionAngle: directionAngle,
+        timestamp: Date.now()
+      });
+    }
+
+    function drawVirtualBat(hx, hy) {
+      canvasCtx.save();
+      canvasCtx.translate(hx, hy);
+      canvasCtx.rotate(smoothAlpha * Math.PI / 180);
+      
+      canvasCtx.strokeStyle = 'var(--accent)';
+      canvasCtx.lineWidth = 6;
+      canvasCtx.beginPath();
+      canvasCtx.moveTo(0, 0);
+      
+      // Length depends on pitch
+      let lenY = 150 + (smoothBeta * 2);
+      if (lenY < 20) lenY = 20;
+      
+      canvasCtx.lineTo(0, -lenY);
+      canvasCtx.stroke();
+
+      canvasCtx.fillStyle = 'white';
+      canvasCtx.beginPath();
+      canvasCtx.arc(0, 0, 10, 0, 2*Math.PI);
+      canvasCtx.fill();
+      
+      canvasCtx.restore();
+    }
+
+    // UI Result rendering
+    const resultOverlay = document.getElementById('result-overlay');
+    const resultText = document.getElementById('result-text');
+    const resultBg = document.getElementById('result-bg');
+    let resultTid = null;
+    
+    function showShotResult(outcome, runs) {
+      clearTimeout(resultTid);
+      let color = '#888'; let t = 'LEAVE';
+      if (outcome === 'out') { color = 'var(--red)'; t = 'OUT!'; }
+      else if (runs === 6) { color = 'var(--accent)'; t = 'SIX!'; }
+      else if (runs === 4) { color = 'var(--blue)'; t = 'FOUR!'; }
+      else if (runs > 0) { color = 'var(--green)'; t = `${runs} RUNS`; }
+
+      resultText.style.color = color;
+      resultText.innerText = t;
+      resultBg.style.backgroundColor = color;
+      resultOverlay.classList.add('visible');
+      resultTid = setTimeout(() => resultOverlay.classList.remove('visible'), 2000);
+    }
+  </script>
+</body>
+</html>

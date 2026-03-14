@@ -46,10 +46,16 @@ const server = http.createServer((req, res) => {
     else if (ext === '.css') contentType = 'text/css';
     else if (ext === '.js') contentType = 'application/javascript';
     
-    res.writeHead(200, { 'Content-Type': contentType });
+    // Add necessary headers for SharedArrayBuffer (sometimes needed by MediaPipe/WASM under the hood)
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp'
+    });
     fs.createReadStream(filePath).pipe(res);
   });
 });
+
 
 // Handle upgrade requests
 server.on('upgrade', (req, socket, head) => {
